@@ -199,12 +199,14 @@ def main():
     import keyboard
     import threading
     class DesktopPet(QWidget, QObject):
+
         def __init__(self, config):
             super().__init__()
             self.config = config
             self.init_ui()
 
             self.chat_window_state_changed = False
+
 
             # 监听全局快捷键的线程
             keyboard_listener_thread = threading.Thread(target=self._run_keyboard_listener, daemon=True)
@@ -253,7 +255,12 @@ def main():
             self.pet_label.setMovie(self.pet_movie)
             self.pet_movie.start()
             self.nickname = self.config["Pet"]["NICKNAME"]
+            self.double_click_time_num = int(self.config["Pet"]["time_interval"])
 
+            self.double_click_timer = QTimer(self)
+            self.double_click_timer.setSingleShot(True)  # 确保只触发一次
+            self.double_click_timer.setInterval(self.double_click_time_num)  # 设置间隔时间
+            self.double_click_timer.timeout.connect(self.on_timeout)
             # 创建一个布局管理器
             layout = QVBoxLayout(self)
             # 将 QLabel 添加到布局管理器中
@@ -273,7 +280,8 @@ def main():
             exit_action = QAction("退出", self, triggered=self.close)
             change_nickname_action = QAction("改昵称", self, triggered=self.change_nickname)
             settings_action = QAction("设置", self, triggered=self.show_settings_dialog)
-            self.menu.addActions([chat_action, web_action, change_icon_action, change_nickname_action, settings_action, exit_action])
+            settings_doubleClickTime = QAction("设置定时", self, triggered=self.change_clickTime)
+            self.menu.addActions([settings_doubleClickTime, change_icon_action, change_nickname_action, settings_action, exit_action])
 
             #随机发起对话功能的气泡框
             self.bubble = QLabel(self.parent())
@@ -287,6 +295,19 @@ def main():
             shadow_effect = QGraphicsDropShadowEffect(blurRadius=5, xOffset=2, yOffset=2)
             self.bubble.setGraphicsEffect(shadow_effect)
             self.show()
+
+        # 双击定时事件
+
+        def on_timeout(self):
+            # 这里是等待6秒后执行的操作
+            print("6 seconds have passed since the last double click.")
+            # 获取屏幕参数
+            screen_geometry = QApplication.desktop().availableGeometry()
+            # 移动到屏幕中央
+            self.move(screen_geometry.width() // 2 - self.width() // 2, screen_geometry.height() // 2 - self.height() // 2)
+            #QMessageBox.information(self, "Timer", "6 seconds have passed!")
+            self.show_bubble("我回来啦！")
+
 
         # 快捷键启动窗口
         def toggle_chat_window(self):
@@ -310,6 +331,15 @@ def main():
                 self.config.set('Pet', 'NICKNAME', new_nickname)
                 # 保存修改后的配置文件
                 self.save_config()
+        def change_clickTime(self):
+            new_nickname, ok = QInputDialog.getText(self, "改定时", "请输入新定时：", QLineEdit.Normal, str(self.double_click_time_num/1000))
+            if ok and new_nickname != '':
+                self.double_click_time_num = (new_nickname)*1000
+                # 修改配置项
+                self.config.set('Pet', 'time_interval', str(self.double_click_time_num))
+                # 保存修改后的配置文件
+                self.save_config()
+                self.double_click_timer.setInterval(self.double_click_time_num)  # 设置间隔时间
         
         #根据鼠标更新对话框位置
         def update_chat_dialog_position(self):
@@ -318,9 +348,24 @@ def main():
                 self.chat_dialog.move(dialog_position)
 
         def mousePressEvent(self, event):
+            # 右键点击
             if event.button() == Qt.LeftButton:
                 self.drag_position = event.globalPos() - self.frameGeometry().topLeft()
                 event.accept()
+            # 右键双击
+
+
+
+        def mouseDoubleClickEvent(self, event):
+            if event.button() == Qt.LeftButton:
+                print("Mouse Left Button Double Clicked at position:", event.pos())
+                # 移动位置到100，100
+                self.move(-100, -100)
+                self.double_click_timer.start()
+            elif event.button() == Qt.RightButton:
+                print("Mouse Right Button Double Clicked at position:", event.pos())
+
+        # 启动一个倒计时线程，倒计时结束就移动到屏幕中央
 
         def mouseMoveEvent(self, event):
             if event.buttons() == Qt.LeftButton:
@@ -599,7 +644,7 @@ def main():
             with codecs.open(config_private, 'w', 'utf-8') as f:
                 self.config.write(f) 
 
-    config_private = 'pet_config_private.ini'
+    config_private = 'pet_config.ini'
     app = QApplication(sys.argv)
     config = configparser.ConfigParser()
     with codecs.open(config_private, 'r', 'utf-8') as f:
